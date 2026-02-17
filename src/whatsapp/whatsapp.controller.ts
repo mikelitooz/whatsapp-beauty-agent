@@ -11,7 +11,7 @@ export class WhatsappController {
     ) { }
 
     /**
-     * Meta webhook verification
+     * Meta webhook verification / health check
      */
     @Get()
     verify(
@@ -27,7 +27,6 @@ export class WhatsappController {
             return res.status(200).send(challenge);
         }
 
-        // Accept any GET without params (health check from n8n/browser)
         if (!mode && !token) {
             return res.status(200).send('Glow Beauty WhatsApp Agent is running 🌸');
         }
@@ -37,82 +36,32 @@ export class WhatsappController {
     }
 
     /**
-     * Handle incoming WhatsApp messages
+     * Handle incoming WhatsApp messages — supports both:
+     * 1. Direct Meta Cloud API format
+     * 2. 24 Manager BSP format (via n8n relay)
      */
     @Post()
     async handleIncoming(@Body() body: any, @Res() res: Response) {
-        // Always respond 200 quickly
         res.status(200).send('OK');
 
-        // Debug log — see what's arriving
-        console.log('📥 Webhook POST received:', JSON.stringify(body, null, 2).substring(0, 500));
+        // Full debug log
+        console.log('📥 RAW PAYLOAD:', JSON.stringify(body, null, 2).substring(0, 3000));
 
         try {
-            // n8n might wrap payload in different ways — try to find the Meta structure
-            let payload = body;
+            // Try to extract message from different payload formats
+            const result = this.extractMessage(body);
 
-            // If n8n sends it wrapped in an array, unwrap
-            if (Array.isArray(payload)) {
-                payload = payload[0];
-            }
-
-            // If n8n nests the body inside a 'body' key
-            if (payload?.body && payload?.body?.entry) {
-                payload = payload.body;
-            }
-
-            // If n8n sends it as a stringified body inside a field
-            if (typeof payload === 'string') {
-                try { payload = JSON.parse(payload); } catch (e) { }
-            }
-
-            const entry = payload?.entry?.[0];
-            const changes = entry?.changes?.[0];
-            const value = changes?.value;
-
-            if (!value?.messages?.[0]) {
-                console.log('ℹ️ No message in payload (status update or other event)');
+            if (!result) {
+                console.log('ℹ️ No extractable message in payload');
                 return;
             }
 
-            const message = value.messages[0];
-            const contact = value.contacts?.[0];
-            const from = message.from; // Phone number
+            const { from, userMessage, buttonPayload, customerName, messageId } = result;
 
             // Mark as read
-            if (message.id) {
-                await this.whatsapp.markAsRead(message.id);
+            if (messageId) {
+                await this.whatsapp.markAsRead(messageId);
             }
-
-            // Extract message content
-            let userMessage = '';
-            let buttonPayload = '';
-
-            if (message.type === 'text') {
-                userMessage = message.text?.body || '';
-            } else if (message.type === 'interactive') {
-                // Button reply
-                if (message.interactive?.type === 'button_reply') {
-                    buttonPayload = message.interactive.button_reply.id;
-                    userMessage = message.interactive.button_reply.title;
-                }
-                // List reply
-                if (message.interactive?.type === 'list_reply') {
-                    buttonPayload = message.interactive.list_reply.id;
-                    userMessage = message.interactive.list_reply.title;
-                }
-            } else if (message.type === 'button') {
-                // Regular button (not interactive)
-                buttonPayload = message.button?.payload || '';
-                userMessage = message.button?.text || '';
-            }
-
-            if (!userMessage && !buttonPayload) {
-                console.log('ℹ️ No text or button content in message');
-                return;
-            }
-
-            const customerName = contact?.profile?.name || 'Customer';
 
             console.log(`📩 ${customerName} (${from}): ${userMessage || buttonPayload}`);
 
@@ -120,7 +69,114 @@ export class WhatsappController {
             await this.bot.handleMessage(from, userMessage, buttonPayload, customerName, this.whatsapp);
         } catch (error: any) {
             console.error('❌ Webhook processing error:', error.message);
-            console.error('Full error:', error.stack);
+            console.error('Stack:', error.stack);
         }
+    }
+
+    /**
+     * Extract message from various payload formats
+     */
+    private extractMessage(body: any): {
+        from: string;
+        userMessage: string;
+        buttonPayload: string;
+        customerName: string;
+        messageId: string;
+    } | null {
+
+        // ===== FORMAT 1: 24 Manager BSP (via n8n) =====
+        // Payload: { headers, params, query, body: { instance_id, data: { ... } } }
+        const bspData = body?.body?.data || body?.data;
+        if (bspData) {
+            console.log('🔍 Detected BSP format. Data:', JSON.stringify(bspData, null, 2).substring(0, 2000));
+
+            // 24 Manager may use different field names
+            const from = bspData.from || bspData.sender || bspData.phone || bspData.remoteJid || '';
+            const pushName = bspData.pushName || bspData.senderName || bspData.name || 'Customer';
+
+            // Clean phone number (remove @s.whatsapp.net if present)
+            const cleanPhone = from.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+
+            if (!cleanPhone) {
+                console.log('ℹ️ BSP data has no phone number');
+                return null;
+            }
+
+            // Extract message content
+            let userMessage = '';
+            let buttonPayload = '';
+            const messageId = bspData.id || bspData.messageId || '';
+
+            // Text message
+            if (bspData.message?.conversation) {
+                userMessage = bspData.message.conversation;
+            } else if (bspData.message?.extendedTextMessage?.text) {
+                userMessage = bspData.message.extendedTextMessage.text;
+            } else if (bspData.body || bspData.text || bspData.message?.text) {
+                userMessage = bspData.body || bspData.text || bspData.message?.text;
+            } else if (typeof bspData.message === 'string') {
+                userMessage = bspData.message;
+            }
+
+            // Button response
+            if (bspData.message?.buttonsResponseMessage) {
+                buttonPayload = bspData.message.buttonsResponseMessage.selectedButtonId || '';
+                userMessage = bspData.message.buttonsResponseMessage.selectedDisplayText || userMessage;
+            }
+
+            // Interactive response (list or button reply)
+            if (bspData.message?.listResponseMessage) {
+                buttonPayload = bspData.message.listResponseMessage.singleSelectReply?.selectedRowId || '';
+                userMessage = bspData.message.listResponseMessage.title || userMessage;
+            }
+
+            if (!userMessage && !buttonPayload) {
+                console.log('ℹ️ BSP format but no text/button content found');
+                return null;
+            }
+
+            return { from: cleanPhone, userMessage, buttonPayload, customerName: pushName, messageId };
+        }
+
+        // ===== FORMAT 2: Direct Meta Cloud API =====
+        // Payload: { entry: [{ changes: [{ value: { messages: [...] } }] }] }
+        let payload = body;
+        if (Array.isArray(payload)) payload = payload[0];
+
+        const entry = payload?.entry?.[0];
+        const changes = entry?.changes?.[0];
+        const value = changes?.value;
+
+        if (!value?.messages?.[0]) {
+            return null;
+        }
+
+        const message = value.messages[0];
+        const contact = value.contacts?.[0];
+        const from = message.from;
+        const customerName = contact?.profile?.name || 'Customer';
+
+        let userMessage = '';
+        let buttonPayload = '';
+
+        if (message.type === 'text') {
+            userMessage = message.text?.body || '';
+        } else if (message.type === 'interactive') {
+            if (message.interactive?.type === 'button_reply') {
+                buttonPayload = message.interactive.button_reply.id;
+                userMessage = message.interactive.button_reply.title;
+            }
+            if (message.interactive?.type === 'list_reply') {
+                buttonPayload = message.interactive.list_reply.id;
+                userMessage = message.interactive.list_reply.title;
+            }
+        } else if (message.type === 'button') {
+            buttonPayload = message.button?.payload || '';
+            userMessage = message.button?.text || '';
+        }
+
+        if (!userMessage && !buttonPayload) return null;
+
+        return { from, userMessage, buttonPayload, customerName, messageId: message.id || '' };
     }
 }

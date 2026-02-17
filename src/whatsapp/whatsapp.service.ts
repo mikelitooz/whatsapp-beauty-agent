@@ -93,7 +93,7 @@ export class WhatsappService {
             console.log(`✅ Product card sent! ID: ${res.data.messages?.[0]?.id}`);
             return { success: true, messageId: res.data.messages?.[0]?.id };
         } catch (err: any) {
-            console.error('❌ sendProductCard error:', err.response?.data || err.message);
+            console.error('❌ sendProductCard error:', JSON.stringify(err.response?.data || err.message, null, 2));
             // Fallback to text-only
             return this.sendMessage(to, body);
         }

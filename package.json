@@ -7,13 +7,10 @@
         "build": "npx prisma generate && npx prisma db push && nest build",
         "start": "node dist/main.js",
         "start:dev": "nest start --watch",
-        "start:nest": "nest start",
-        "prisma:generate": "prisma generate",
-        "prisma:push": "prisma db push",
-        "seed": "ts-node prisma/seed.ts",
-        "postinstall": "npx prisma generate"
+        "seed": "ts-node prisma/seed.ts"
     },
     "dependencies": {
+        "@nestjs/cli": "^10.0.0",
         "@nestjs/common": "^10.0.0",
         "@nestjs/config": "^4.0.3",
         "@nestjs/core": "^10.0.0",
@@ -21,14 +18,13 @@
         "@prisma/client": "^5.0.0",
         "axios": "^1.6.0",
         "openai": "^4.0.0",
-        "reflect-metadata": "^0.2.0",
-        "rxjs": "^7.8.0"
-    },
-    "devDependencies": {
-        "@nestjs/cli": "^10.0.0",
-        "@types/node": "^20.0.0",
         "prisma": "^5.0.0",
+        "reflect-metadata": "^0.2.0",
+        "rxjs": "^7.8.0",
         "ts-node": "^10.9.0",
         "typescript": "^5.0.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20.0.0"
     }
 }

@@ -35,6 +35,19 @@ export class BotService {
             else if (t.includes('🗑️ Clear Cart')) buttonPayload = 'clear_cart';
             else if (t.includes('🔍 More Categories')) buttonPayload = 'browse';
             else if (t.includes('🔍 Keep Shopping')) buttonPayload = 'browse';
+            else if (t.includes('🛒 Add ')) {
+                // Formatting: "🛒 Add <Name>"
+                // Try to find product by name
+                const productName = t.replace('🛒 Add ', '').replace('..', '').trim();
+                const products = await this.products.search(productName);
+                if (products.length > 0) buttonPayload = `add_${products[0].id}`;
+            }
+            else if (t.includes('📋 View ')) {
+                // Formatting: "📋 View <Name>"
+                const productName = t.replace('📋 View ', '').replace('..', '').trim();
+                const products = await this.products.search(productName);
+                if (products.length > 0) buttonPayload = `details_${products[0].id}`;
+            }
         }
 
         // === BUTTON CLICKS ===

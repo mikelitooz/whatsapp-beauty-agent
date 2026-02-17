@@ -54,6 +54,11 @@ export class WhatsappService {
         const body = `✨ *${product.name}*\n${priceText}\n\n${product.description}`;
         console.log(`📤 Sending product card to ${to}: ${product.name}`);
 
+        // Truncate name for button (max 20 chars for button title)
+        // format: "Add <Name>"
+        // "Add " is 4 chars. allowable name = 14 chars.
+        const shortName = product.name.length > 13 ? product.name.substring(0, 12) + '..' : product.name;
+
         try {
             const res = await axios.post(
                 `${this.baseUrl}/${this.phoneNumberId}/messages`,
@@ -73,11 +78,11 @@ export class WhatsappService {
                             buttons: [
                                 {
                                     type: 'reply',
-                                    reply: { id: `add_${product.id}`, title: '🛒 Add to Cart' },
+                                    reply: { id: `add_${product.id}`, title: `🛒 Add ${shortName}` },
                                 },
                                 {
                                     type: 'reply',
-                                    reply: { id: `details_${product.id}`, title: '📋 View Details' },
+                                    reply: { id: `details_${product.id}`, title: `📋 View ${shortName}` },
                                 },
                             ],
                         },

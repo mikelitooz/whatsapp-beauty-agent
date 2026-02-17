@@ -85,17 +85,17 @@ export class WhatsappController {
     } | null {
 
         // ===== FORMAT 1: 24 Manager BSP (via n8n) =====
-        // Payload: { headers, params, query, body: { instance_id, data: { ... } } }
+        // Payload: { headers, params, query, body: { instance_id, data: { event, message: { body_message, message_key, push_name, from_contact } } } }
         const bspData = body?.body?.data || body?.data;
-        if (bspData) {
-            console.log('🔍 Detected BSP format. Data:', JSON.stringify(bspData, null, 2).substring(0, 2000));
+        if (bspData && bspData.event === 'received_message') {
+            const msg = bspData.message;
+            console.log('🔍 24 Manager BSP message:', JSON.stringify(msg, null, 2).substring(0, 2000));
 
-            // 24 Manager may use different field names
-            const from = bspData.from || bspData.sender || bspData.phone || bspData.remoteJid || '';
-            const pushName = bspData.pushName || bspData.senderName || bspData.name || 'Customer';
-
-            // Clean phone number (remove @s.whatsapp.net if present)
-            const cleanPhone = from.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+            // Extract phone from message.from_contact or message_key.remoteJid
+            const from = msg?.from_contact || msg?.message_key?.remoteJid?.replace('@s.whatsapp.net', '') || '';
+            const cleanPhone = from.replace(/\D/g, '');
+            const pushName = msg?.push_name || 'Customer';
+            const messageId = msg?.message_key?.id || '';
 
             if (!cleanPhone) {
                 console.log('ℹ️ BSP data has no phone number');
@@ -105,36 +105,42 @@ export class WhatsappController {
             // Extract message content
             let userMessage = '';
             let buttonPayload = '';
-            const messageId = bspData.id || bspData.messageId || '';
 
-            // Text message
-            if (bspData.message?.conversation) {
-                userMessage = bspData.message.conversation;
-            } else if (bspData.message?.extendedTextMessage?.text) {
-                userMessage = bspData.message.extendedTextMessage.text;
-            } else if (bspData.body || bspData.text || bspData.message?.text) {
-                userMessage = bspData.body || bspData.text || bspData.message?.text;
-            } else if (typeof bspData.message === 'string') {
-                userMessage = bspData.message;
+            // Text message — body_message.content or messages.conversation
+            if (msg?.body_message?.content) {
+                userMessage = msg.body_message.content;
+            } else if (msg?.body_message?.messages?.conversation) {
+                userMessage = msg.body_message.messages.conversation;
             }
 
-            // Button response
-            if (bspData.message?.buttonsResponseMessage) {
-                buttonPayload = bspData.message.buttonsResponseMessage.selectedButtonId || '';
-                userMessage = bspData.message.buttonsResponseMessage.selectedDisplayText || userMessage;
+            // Button response (when user clicks a reply button)
+            if (msg?.body_message?.type === 'buttonsResponseMessage') {
+                buttonPayload = msg.body_message.messages?.selectedButtonId || '';
+                userMessage = msg.body_message.content || msg.body_message.messages?.selectedDisplayText || userMessage;
             }
 
-            // Interactive response (list or button reply)
-            if (bspData.message?.listResponseMessage) {
-                buttonPayload = bspData.message.listResponseMessage.singleSelectReply?.selectedRowId || '';
-                userMessage = bspData.message.listResponseMessage.title || userMessage;
+            // Interactive button reply
+            if (msg?.body_message?.type === 'interactive' || msg?.body_message?.messages?.button_reply) {
+                const btnReply = msg.body_message.messages?.button_reply;
+                if (btnReply) {
+                    buttonPayload = btnReply.id || '';
+                    userMessage = btnReply.title || userMessage;
+                }
+            }
+
+            // Interactive list reply
+            if (msg?.body_message?.messages?.list_reply) {
+                const listReply = msg.body_message.messages.list_reply;
+                buttonPayload = listReply.id || '';
+                userMessage = listReply.title || userMessage;
             }
 
             if (!userMessage && !buttonPayload) {
-                console.log('ℹ️ BSP format but no text/button content found');
+                console.log('ℹ️ BSP format but no text/button content found in body_message');
                 return null;
             }
 
+            console.log(`✅ Extracted: phone=${cleanPhone}, name=${pushName}, msg="${userMessage}", btn="${buttonPayload}"`);
             return { from: cleanPhone, userMessage, buttonPayload, customerName: pushName, messageId };
         }
 

@@ -55,9 +55,9 @@ export class WhatsappService {
         console.log(`📤 Sending product card to ${to}: ${product.name}`);
 
         // Truncate name for button (max 20 chars for button title)
-        // format: "Add <Name>"
-        // "Add " is 4 chars. allowable name = 14 chars.
-        const shortName = product.name.length > 13 ? product.name.substring(0, 12) + '..' : product.name;
+        // "Add " is 4 chars. Emoji is 2 chars. Total prefix ~6.
+        // Safer to limit name to 10 chars.
+        const shortName = product.name.length > 10 ? product.name.substring(0, 9) + '..' : product.name;
 
         try {
             const res = await axios.post(

@@ -23,6 +23,20 @@ export class BotService {
         // Get or create conversation state
         const state = await this.getState(phone);
 
+        // === TEXT FALLBACK FOR BUTTONS ===
+        // If payload is missing, check if text matches specific button titles
+        if (!buttonPayload) {
+            const t = text.trim();
+            if (t.includes('💄 Makeup') || t.toLowerCase() === 'makeup') buttonPayload = 'cat_Makeup';
+            else if (t.includes('🧴 Skincare') || t.toLowerCase() === 'skincare') buttonPayload = 'cat_Skincare';
+            else if (t.includes('💇 Hair') || t.toLowerCase() === 'hair') buttonPayload = 'cat_Hair';
+            else if (t.includes('✅ Checkout') || t.toLowerCase() === 'checkout') buttonPayload = 'checkout';
+            else if (t.includes('🛒 View Cart') || t.toLowerCase() === 'view cart') buttonPayload = 'view_cart';
+            else if (t.includes('🗑️ Clear Cart')) buttonPayload = 'clear_cart';
+            else if (t.includes('🔍 More Categories')) buttonPayload = 'browse';
+            else if (t.includes('🔍 Keep Shopping')) buttonPayload = 'browse';
+        }
+
         // === BUTTON CLICKS ===
         if (buttonPayload) {
             return this.handleButton(phone, buttonPayload, customerName, state, wa);

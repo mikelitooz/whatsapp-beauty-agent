@@ -20,6 +20,7 @@ export class WhatsappService {
      */
     async sendMessage(to: string, message: string) {
         try {
+            console.log(`📤 Sending text to ${to}: "${message.substring(0, 50)}..."`);
             const res = await axios.post(
                 `${this.baseUrl}/${this.phoneNumberId}/messages`,
                 {
@@ -31,6 +32,7 @@ export class WhatsappService {
                 },
                 { headers: this.headers },
             );
+            console.log(`✅ Message sent! ID: ${res.data.messages?.[0]?.id}`);
             return { success: true, messageId: res.data.messages?.[0]?.id };
         } catch (err: any) {
             console.error('❌ sendMessage error:', err.response?.data || err.message);
@@ -40,7 +42,6 @@ export class WhatsappService {
 
     /**
      * Send product card — image header + price body + Add to Cart button
-     * This is the key feature matching Anderson's screenshot
      */
     async sendProductCard(
         to: string,
@@ -51,6 +52,7 @@ export class WhatsappService {
             : `Price: ₦${product.price.toLocaleString()}`;
 
         const body = `✨ *${product.name}*\n${priceText}\n\n${product.description}`;
+        console.log(`📤 Sending product card to ${to}: ${product.name}`);
 
         try {
             const res = await axios.post(
@@ -83,6 +85,7 @@ export class WhatsappService {
                 },
                 { headers: this.headers },
             );
+            console.log(`✅ Product card sent! ID: ${res.data.messages?.[0]?.id}`);
             return { success: true, messageId: res.data.messages?.[0]?.id };
         } catch (err: any) {
             console.error('❌ sendProductCard error:', err.response?.data || err.message);
@@ -101,6 +104,7 @@ export class WhatsappService {
         headerText?: string,
     ) {
         try {
+            console.log(`📤 Sending buttons to ${to}: "${bodyText.substring(0, 30)}..." with ${buttons.length} buttons`);
             const interactive: any = {
                 type: 'button',
                 body: { text: bodyText },
@@ -127,6 +131,7 @@ export class WhatsappService {
                 },
                 { headers: this.headers },
             );
+            console.log(`✅ Buttons sent! ID: ${res.data.messages?.[0]?.id}`);
             return { success: true, messageId: res.data.messages?.[0]?.id };
         } catch (err: any) {
             console.error('❌ sendButtons error:', err.response?.data || err.message);

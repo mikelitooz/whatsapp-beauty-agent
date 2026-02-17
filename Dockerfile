@@ -12,7 +12,4 @@ RUN npx prisma generate
 
 RUN npx tsc
 
-ENV PORT=3000
-EXPOSE 3000
-
 CMD ["sh", "-c", "npx prisma db push --skip-generate && npx ts-node prisma/seed.ts && node dist/main.js"]
